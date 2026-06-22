@@ -1,0 +1,11 @@
+# Zugangsdaten / persoenliche Daten
+.env
+spieler_map.json
+
+# Debug-Ausgaben (enthalten u. U. personenbezogene Daten)
+_debug/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
