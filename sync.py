@@ -41,6 +41,11 @@ def parse_datetime(s: str) -> str | None:
     return local.isoformat()
 
 
+def is_laufen(event: dict) -> bool:
+    """True, wenn das SpielerPlus-Training den Titel 'Laufen' traegt."""
+    return "laufen" in (event.get("title") or "").lower()
+
+
 # Freitext-Position (aus Anytype) -> Handball-Kategorie. Reihenfolge wichtig.
 def position_category(pos: str) -> str:
     p = (pos or "").lower()
@@ -188,12 +193,17 @@ def main() -> None:
         return
     sp.switch_team(int(team_id))
     events = [e for e in sp.list_events() if e["type"] == "training"]
+    # Tage, an denen es ein regulaeres (Nicht-"Laufen") Training gibt. Aus der
+    # vollen Liste (vor --limit), damit die Regel unabhaengig vom Limit greift.
+    days_with_other = {e["day"] for e in events
+                       if e.get("day") and not is_laufen(e)}
     if args.limit:
         events = events[: args.limit]
     print(f"SpielerPlus: {len(events)} Training(s) gefunden.\n")
 
     # --- Anytype ---
-    at = Anytype(env["Api_key"], env["ANYTYPE_SPACE_ID"])
+    at = Anytype(env["Api_key"], env["ANYTYPE_SPACE_ID"],
+                 api_base=env.get("ANYTYPE_API_BASE"))
     details = at.spieler_details()                       # uid -> {id,name,pos}
     spieler_map = {uid: d["id"] for uid, d in details.items()}
     tindex = at.training_index()
@@ -205,8 +215,15 @@ def main() -> None:
     print(f"Anytype: {len(spieler_map)} Spieler, {len(tindex)} bestehende Trainings.\n")
 
     for e in events:
-        info = collect_event(sp, e, details, exclude)
         eid = str(e["id"])
+
+        # "Laufen" ignorieren, wenn am selben Tag ein anderes Training ist.
+        if is_laufen(e) and e.get("day") in days_with_other:
+            print(f"== {e.get('title')}  (Event {eid})")
+            print("   uebersprungen ('Laufen', anderes Training am selben Tag)")
+            continue
+
+        info = collect_event(sp, e, details, exclude)
         print(f"== {info['name']}  (Event {eid})")
         print(f"   Anwesend: {info['anwesend']} | Abgesagt: {info['abgesagt']}"
               + (f" | nicht zuordenbar: {info['unmapped']}" if info["unmapped"] else ""))
